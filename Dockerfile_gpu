@@ -1,0 +1,184 @@
+FROM nvidia/cuda:9.0-base-ubuntu16.04
+
+
+LABEL maintainer="Craig Citro <craigcitro@google.com>"
+
+
+# Pick up some TF dependencies
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+
+
+        build-essential \
+
+        cuda-command-line-tools-9-0 \
+
+        cuda-cublas-9-0 \
+
+        cuda-cufft-9-0 \
+
+        cuda-curand-9-0 \
+
+        cuda-cusolver-9-0 \
+
+        cuda-cusparse-9-0 \
+
+        curl \
+
+        libcudnn7=7.2.1.38-1+cuda9.0 \
+
+        libnccl2=2.2.13-1+cuda9.0 \
+
+        libfreetype6-dev \
+
+        libhdf5-serial-dev \
+
+        libpng12-dev \
+
+        libzmq3-dev \
+
+        pkg-config \
+
+        python \
+
+        python-dev \
+
+        rsync \
+
+        software-properties-common \
+
+        unzip \
+        python3-dev \
+        libgtk2.0-0 \
+        git \
+	tcl-dev \
+	tk-dev \
+
+        && \
+
+    apt-get clean && \
+
+    rm -rf /var/lib/apt/lists/*
+
+
+
+RUN apt-get update && \
+
+        apt-get install nvinfer-runtime-trt-repo-ubuntu1604-4.0.1-ga-cuda9.0 && \
+
+        apt-get update && \
+
+        apt-get install libnvinfer4=4.1.2-1+cuda9.0
+
+
+
+RUN curl -O https://bootstrap.pypa.io/get-pip.py && \
+
+    python get-pip.py && \
+
+    rm get-pip.py
+
+
+
+RUN pip --no-cache-dir install \
+
+        Pillow \
+
+        h5py \
+
+        ipykernel \
+
+        jupyter \
+
+        keras_applications==1.0.5 \
+
+        keras_preprocessing==1.0.3 \
+
+        matplotlib \
+
+        numpy \
+
+        pandas \
+
+        scipy \
+
+        sklearn \
+
+        && \
+
+    python -m ipykernel.kernelspec
+
+
+
+# RUN ln -s -f /usr/bin/python3 /usr/bin/python#
+
+ADD https://repo.continuum.io/miniconda/Miniconda3-4.5.4-Linux-x86_64.sh tmp/Miniconda3-4.5.4-Linux-x86_64.sh
+RUN bash tmp/Miniconda3-4.5.4-Linux-x86_64.sh -b
+ENV PATH $PATH:/root/miniconda3/bin/
+RUN conda update -n base conda -y
+
+COPY environment-gpu.yml  ./environment.yml
+RUN conda env create -f=environment.yml --name carnd-term5 --debug -v -v
+
+
+
+# --- DO NOT EDIT OR DELETE BETWEEN THE LINES --- #
+
+# These lines will be edited automatically by parameterized_docker_build.sh. #
+
+# COPY _PIP_FILE_ /
+
+# RUN pip --no-cache-dir install /_PIP_FILE_
+
+# RUN rm -f /_PIP_FILE_
+
+
+
+# Install TensorFlow GPU version.
+
+#RUN pip --no-cache-dir install \
+
+
+    #https://storage.googleapis.com/tensorflow/linux/gpu/tensorflow_gpu-1.10.0-cp36-cp36m-linux_x86_64.whl
+    #https://storage.googleapis.com/tensorflow/linux/gpu/tensorflow_gpu-1.10.1-cp35-cp35m-linux_x86_64.whl
+
+# --- ~ DO NOT EDIT OR DELETE BETWEEN THE LINES --- #
+
+
+
+# cleanup tarballs and downloaded package files
+RUN conda clean -tp -y
+
+# Set up our notebook config.
+COPY jupyter_notebook_config.py /root/.jupyter/
+
+# Term 1 workdir
+RUN mkdir /src
+# Copy notebooks.
+COPY . /src
+
+WORKDIR "/src"
+
+# Make sure CUDNN is detected
+ENV LD_LIBRARY_PATH /usr/local/cuda/lib64/:$LD_LIBRARY_PATH
+
+# For CUDA profiling, TensorFlow requires CUPTI.
+
+ENV LD_LIBRARY_PATH /usr/local/cuda/extras/CUPTI/lib64:$LD_LIBRARY_PATH
+#RUN ln -s /usr/local/cuda/lib64/libcudnn.so.7 /usr/local/cuda/lib64/libcudnn.so
+RUN ln -s /usr/lib/x86_64-linux-gnu/libcudnn.so.7.2.1 /usr/local/cuda/lib64/libcudnn.so
+#RUN ln -s /usr/local/cuda/lib64/libcusolver.so.9.0 /usr/local/cuda/lib64/libcusolver.so
+
+# TensorBoard
+EXPOSE 6006
+# Jupyter
+EXPOSE 8888
+# Flask Server
+EXPOSE 4567
+
+## Two Birds, One Stone
+# 1. sources conda environment
+# 2. prevents the zombie container issue when started as pid 1
+COPY run.sh /
+RUN chmod +x /run.sh
+ENTRYPOINT ["/run.sh"]
